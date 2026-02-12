@@ -12,6 +12,7 @@ export class ApplicationStreamSlider {
         this.stream = stream;
         this._control = Volume.getMixerControl();
         this._showIcon = opts.showIcon;
+        this._onStateChanged = opts.onStateChanged ?? null;
         this._syncing = false;
 
         this.item = new PopupMenu.PopupBaseMenuItem({
@@ -86,6 +87,7 @@ export class ApplicationStreamSlider {
         }
 
         this.stream.change_is_muted(!wasMuted);
+        this._notifyStateChanged();
     }
 
     _sliderChanged() {
@@ -103,6 +105,7 @@ export class ApplicationStreamSlider {
 
         this.stream.push_volume();
         this._refreshIcon();
+        this._notifyStateChanged();
     }
 
     _syncFromStream() {
@@ -119,8 +122,11 @@ export class ApplicationStreamSlider {
 
     _refreshIcon() {
         if (this._showIcon) {
-            this._icon.icon_name = this.stream.get_icon_name();
-            return;
+            const streamIconName = this.stream.get_icon_name?.();
+            if (streamIconName) {
+                this._icon.icon_name = streamIconName;
+                return;
+            }
         }
 
         const muted = this._streamIsMuted();
@@ -142,6 +148,11 @@ export class ApplicationStreamSlider {
         }
 
         this._icon.icon_name = 'audio-volume-high-symbolic';
+    }
+
+    _notifyStateChanged() {
+        if (this._onStateChanged)
+            this._onStateChanged(this.stream);
     }
 
     destroy() {

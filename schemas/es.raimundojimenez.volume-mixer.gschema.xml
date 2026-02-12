@@ -17,5 +17,17 @@
       </choices>
       <default>'block'</default>
     </key>
+    <key name="show-panel-icon" type="b">
+      <default>true</default>
+    </key>
+    <key name="panel-icon-name" type="s">
+      <default>'audio-x-generic-symbolic'</default>
+    </key>
+    <key name="enable-boost-toggle" type="b">
+      <default>true</default>
+    </key>
+    <key name="saved-app-volumes" type="a{sv}">
+      <default>{}</default>
+    </key>
   </schema>
 </schemalist>

@@ -1,5 +1,6 @@
 import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gtk from 'gi://Gtk';
 
@@ -51,6 +52,38 @@ export const VolumeMixerPrefsPage = GObject.registerClass({
         showIconRow.add_suffix(showIconToggle);
         showIconRow.activatable_widget = showIconToggle;
 
+        const showPanelIconRow = new Adw.ActionRow({title: 'Show Panel Icon'});
+        generalGroup.add(showPanelIconRow);
+
+        const showPanelIconToggle = new Gtk.Switch({
+            active: this.settings.get_boolean('show-panel-icon'),
+            valign: Gtk.Align.CENTER,
+        });
+        this.settings.bind(
+            'show-panel-icon',
+            showPanelIconToggle,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        showPanelIconRow.add_suffix(showPanelIconToggle);
+        showPanelIconRow.activatable_widget = showPanelIconToggle;
+
+        const showBoostToggleRow = new Adw.ActionRow({title: 'Show Volume Boost Toggle'});
+        generalGroup.add(showBoostToggleRow);
+
+        const showBoostToggle = new Gtk.Switch({
+            active: this.settings.get_boolean('enable-boost-toggle'),
+            valign: Gtk.Align.CENTER,
+        });
+        this.settings.bind(
+            'enable-boost-toggle',
+            showBoostToggle,
+            'active',
+            Gio.SettingsBindFlags.DEFAULT
+        );
+        showBoostToggleRow.add_suffix(showBoostToggle);
+        showBoostToggleRow.activatable_widget = showBoostToggle;
+
         const filterGroup = new Adw.PreferencesGroup({
             title: 'Application Filtering',
             description: 'Hide applications from the volume mixer.',
@@ -91,6 +124,28 @@ export const VolumeMixerPrefsPage = GObject.registerClass({
             this.filteredAppsGroup.add(this.buildFilterListRow(filteredAppName));
 
         this.createAddFilteredAppButtonRow();
+
+        const savedLevelsGroup = new Adw.PreferencesGroup({
+            title: 'Saved Application Levels',
+            description: 'Per-application levels are persisted by application name.',
+        });
+        this.add(savedLevelsGroup);
+
+        const clearSavedLevelsRow = new Adw.ActionRow({
+            title: 'Clear Saved Levels',
+            subtitle: 'Remove all persisted volume and mute values.',
+        });
+        savedLevelsGroup.add(clearSavedLevelsRow);
+
+        const clearSavedLevelsButton = new Gtk.Button({
+            label: 'Clear',
+            valign: Gtk.Align.CENTER,
+        });
+        clearSavedLevelsButton.connect('clicked', () => {
+            this.settings.set_value('saved-app-volumes', new GLib.Variant('a{sv}', {}));
+        });
+        clearSavedLevelsRow.add_suffix(clearSavedLevelsButton);
+        clearSavedLevelsRow.activatable_widget = clearSavedLevelsButton;
     }
 
     createAddFilteredAppButtonRow() {
