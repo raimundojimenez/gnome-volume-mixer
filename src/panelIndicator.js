@@ -1,5 +1,6 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import St from 'gi://St';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -10,9 +11,10 @@ import {VolumeMixerPopupMenu} from './volumeMixerPopupMenu.js';
 const DEFAULT_PANEL_ICON = 'volume-mixer-symbolic';
 const LEGACY_PANEL_ICON = 'audio-x-generic-symbolic';
 
-export class VolumeMixerPanelIndicator extends PanelMenu.Button {
-    constructor(settings, openPreferencesCallback, extensionPath, ownerUuid) {
-        super(0.0, 'Application Volume Mixer', false);
+export const VolumeMixerPanelIndicator = GObject.registerClass(
+class VolumeMixerPanelIndicator extends PanelMenu.Button {
+    _init(settings, openPreferencesCallback, extensionPath, ownerUuid) {
+        super._init(0.0, 'Application Volume Mixer', false);
 
         this._settings = settings;
         this._openPreferencesCallback = openPreferencesCallback;
@@ -58,7 +60,11 @@ export class VolumeMixerPanelIndicator extends PanelMenu.Button {
             return;
 
         this._icon.gicon = null;
-        this._icon.icon_name = configuredName || LEGACY_PANEL_ICON;
+        const iconTheme = St.IconTheme.new();
+        if (configuredName && iconTheme.has_icon(configuredName))
+            this._icon.icon_name = configuredName;
+        else
+            this._icon.icon_name = LEGACY_PANEL_ICON;
     }
 
     _setExtensionIcon() {
@@ -106,4 +112,4 @@ export class VolumeMixerPanelIndicator extends PanelMenu.Button {
 
         super.destroy();
     }
-}
+});

@@ -202,12 +202,15 @@ export default class VolumeMixerExtension extends Extension {
         if (!this._boostIndicator)
             return;
 
+        this._boostIndicator.quickSettingsItems.forEach(item => item.destroy());
         this._boostIndicator.destroy();
         this._boostIndicator = null;
     }
 
     _cleanupOrphanBoostIndicators() {
         const quickSettings = this._getQuickSettings();
+
+        // 1. Clean up orphan indicators in _indicators
         const indicators = quickSettings?._indicators?.get_children?.() ?? [];
         for (const indicator of indicators) {
             if (!this._isOurBoostIndicator(indicator))
@@ -217,11 +220,30 @@ export default class VolumeMixerExtension extends Extension {
                 continue;
 
             try {
+                indicator.quickSettingsItems?.forEach(item => item.destroy());
                 indicator.destroy();
             } catch (error) {
                 console.warn(
                     `[${this.metadata.uuid}] Unable to destroy stale boost indicator: ${error}`
                 );
+            }
+        }
+
+        // 2. Clean up orphan toggles reparented into _grid
+        const gridChildren = quickSettings?._grid?.get_children?.() ?? [];
+        for (const child of gridChildren) {
+            if (child === this._boostIndicator?._toggle)
+                continue;
+
+            if (child?._volumeMixerOwnerUuid === this.metadata.uuid ||
+                child?.constructor?.name === 'VolumeBoostToggle') {
+                try {
+                    child.destroy();
+                } catch (error) {
+                    console.warn(
+                        `[${this.metadata.uuid}] Unable to destroy orphan boost toggle: ${error}`
+                    );
+                }
             }
         }
     }

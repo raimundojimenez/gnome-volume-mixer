@@ -35,4 +35,9 @@ class VolumeBoostIndicator extends SystemIndicator {
         this._toggle = new VolumeBoostToggle(ownerUuid);
         this.quickSettingsItems.push(this._toggle);
     }
+
+    destroy() {
+        this.quickSettingsItems.forEach(item => item.destroy());
+        super.destroy();
+    }
 });
