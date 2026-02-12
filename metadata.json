@@ -2,7 +2,7 @@
   "shell-version": ["45", "46", "47", "48", "49"],
   "uuid": "volume-mixer@raimundojimenez.es",
   "settings-schema": "es.raimundojimenez.volume-mixer",
-  "orginal-author": "raimundojimenez@raimundojimenez.es",
+  "version": 1,
   "name": "Application Volume Mixer",
   "description": "Control volume output per-application",
   "url": "https://github.com/raimundojimenez"
