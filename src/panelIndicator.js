@@ -8,8 +8,8 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 
 import {VolumeMixerPopupMenu} from './volumeMixerPopupMenu.js';
 
-const DEFAULT_PANEL_ICON = 'volume-mixer-symbolic';
-const LEGACY_PANEL_ICON = 'audio-x-generic-symbolic';
+const DEFAULT_PANEL_ICON = 'audio-speakers-symbolic';
+const EXTENSION_ICON = 'volume-mixer-symbolic';
 
 export const VolumeMixerPanelIndicator = GObject.registerClass(
 class VolumeMixerPanelIndicator extends PanelMenu.Button {
@@ -43,28 +43,21 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
 
     _refreshIcon() {
         const rawName = this._settings.get_string('panel-icon-name');
-        const hasUserValue = typeof this._settings.get_user_value === 'function' &&
-            this._settings.get_user_value('panel-icon-name') !== null;
         let configuredName = typeof rawName === 'string' ? rawName.trim() : '';
 
         if (!configuredName)
             configuredName = DEFAULT_PANEL_ICON;
 
-        if (!hasUserValue && configuredName === LEGACY_PANEL_ICON)
-            configuredName = DEFAULT_PANEL_ICON;
-
-        if (configuredName === DEFAULT_PANEL_ICON && this._setExtensionIcon())
+        // If user explicitly chose the bundled extension SVG, load from file
+        if (configuredName === EXTENSION_ICON && this._setExtensionIcon())
             return;
 
         if (this._setIconFromPath(configuredName))
             return;
 
+        // Standard theme icon (audio-speakers-symbolic, etc.)
         this._icon.gicon = null;
-        const iconTheme = St.IconTheme.new();
-        if (configuredName && iconTheme.has_icon(configuredName))
-            this._icon.icon_name = configuredName;
-        else
-            this._icon.icon_name = LEGACY_PANEL_ICON;
+        this._icon.icon_name = configuredName;
     }
 
     _setExtensionIcon() {
@@ -74,7 +67,7 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
         const iconPath = GLib.build_filenamev([
             this._extensionPath,
             'icons',
-            `${DEFAULT_PANEL_ICON}.svg`,
+            `${EXTENSION_ICON}.svg`,
         ]);
 
         return this._setIconFromPath(iconPath);

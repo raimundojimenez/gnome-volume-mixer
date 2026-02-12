@@ -5,6 +5,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 
 import {ApplicationStreamSlider} from './applicationStreamSlider.js';
+import {DeviceStreamSlider} from './deviceStreamSlider.js';
 
 const EMPTY_STATE_TEXT = 'No active application streams';
 const MAX_SAVED_VOLUME_NORM = 1.5;
@@ -22,6 +23,13 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._hiddenItem.set_height(0);
         this.addMenuItem(this._hiddenItem);
 
+        // Device sliders (output + input) above the app streams section
+        this._outputSlider = new DeviceStreamSlider('output');
+        this.addMenuItem(this._outputSlider.item);
+
+        this._inputSlider = new DeviceStreamSlider('input');
+        this.addMenuItem(this._inputSlider.item);
+
         this.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._emptyItem = new PopupMenu.PopupMenuItem(EMPTY_STATE_TEXT, {
             reactive: false,
@@ -30,8 +38,17 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this.addMenuItem(this._emptyItem);
 
         this._control = Volume.getMixerControl();
+        if (!this._control) {
+            console.warn('[volume-mixer] MixerControl not available');
+            return;
+        }
+
         this._streamAddedEventId = this._control.connect('stream-added', this._streamAdded.bind(this));
         this._streamRemovedEventId = this._control.connect('stream-removed', this._streamRemoved.bind(this));
+        this._defaultSinkChangedId = this._control.connect('default-sink-changed',
+            () => this._refreshOutputSlider());
+        this._defaultSourceChangedId = this._control.connect('default-source-changed',
+            () => this._refreshInputSlider());
 
         this._settingsChangedIds.push(
             this.settings.connect('changed::filtered-apps', () => this._updateStreams()),
@@ -42,7 +59,17 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         );
 
         this._loadSavedVolumes();
-        this._updateStreams();
+
+        // MixerControl may still be connecting to PulseAudio/PipeWire;
+        // get_streams() returns empty until state reaches READY
+        const state = this._control.get_state?.() ?? null;
+        if (state === Gvc.MixerControlState.READY) {
+            this._refreshDeviceSliders();
+            this._updateStreams();
+        } else {
+            this._stateChangedId = this._control.connect('state-changed',
+                (_control, newState) => this._onStateChanged(newState));
+        }
     }
 
     _streamAdded(control, id) {
@@ -106,6 +133,40 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
 
     _syncEmptyState() {
         this._emptyItem.visible = Object.keys(this._applicationStreams).length === 0;
+    }
+
+    _onStateChanged(newState) {
+        if (newState === Gvc.MixerControlState.READY) {
+            console.log('[volume-mixer] MixerControl reached READY state');
+            this._disconnectStateChanged();
+            this._refreshDeviceSliders();
+            this._updateStreams();
+        } else if (newState === Gvc.MixerControlState.FAILED) {
+            console.warn('[volume-mixer] MixerControl failed to connect');
+            this._disconnectStateChanged();
+        }
+    }
+
+    _disconnectStateChanged() {
+        if (this._stateChangedId) {
+            this._control.disconnect(this._stateChangedId);
+            this._stateChangedId = null;
+        }
+    }
+
+    _refreshDeviceSliders() {
+        this._refreshOutputSlider();
+        this._refreshInputSlider();
+    }
+
+    _refreshOutputSlider() {
+        const sink = this._control.get_default_sink?.() ?? null;
+        this._outputSlider.setStream(sink);
+    }
+
+    _refreshInputSlider() {
+        const source = this._control.get_default_source?.() ?? null;
+        this._inputSlider.setStream(source);
     }
 
     _persistStreamState(stream) {
@@ -228,6 +289,8 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
     }
 
     destroy() {
+        this._disconnectStateChanged();
+
         if (this._streamAddedEventId) {
             this._control.disconnect(this._streamAddedEventId);
             this._streamAddedEventId = null;
@@ -238,6 +301,16 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
             this._streamRemovedEventId = null;
         }
 
+        if (this._defaultSinkChangedId) {
+            this._control.disconnect(this._defaultSinkChangedId);
+            this._defaultSinkChangedId = null;
+        }
+
+        if (this._defaultSourceChangedId) {
+            this._control.disconnect(this._defaultSourceChangedId);
+            this._defaultSourceChangedId = null;
+        }
+
         for (const settingsChangedId of this._settingsChangedIds)
             this.settings.disconnect(settingsChangedId);
         this._settingsChangedIds = [];
@@ -245,6 +318,16 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         for (const id in this._applicationStreams)
             this._applicationStreams[id].destroy();
         this._applicationStreams = {};
+
+        if (this._outputSlider) {
+            this._outputSlider.destroy();
+            this._outputSlider = null;
+        }
+
+        if (this._inputSlider) {
+            this._inputSlider.destroy();
+            this._inputSlider = null;
+        }
 
         super.destroy();
     }
