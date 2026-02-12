@@ -13,13 +13,14 @@ const EXTENSION_ICON = 'volume-mixer-symbolic';
 
 export const VolumeMixerPanelIndicator = GObject.registerClass(
 class VolumeMixerPanelIndicator extends PanelMenu.Button {
-    _init(settings, openPreferencesCallback, extensionPath, ownerUuid) {
+    _init(settings, openPreferencesCallback, extensionPath, ownerUuid, metadata) {
         super._init(0.0, 'Application Volume Mixer', false);
 
         this._settings = settings;
         this._openPreferencesCallback = openPreferencesCallback;
         this._extensionPath = extensionPath;
         this._volumeMixerOwnerUuid = ownerUuid;
+        this._metadata = metadata;
 
         this._icon = new St.Icon({
             style_class: 'system-status-icon',
@@ -33,6 +34,17 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
         const prefsItem = new PopupMenu.PopupMenuItem('Preferences');
         prefsItem.connect('activate', () => this._openPreferencesCallback?.());
         this.menu.addMenuItem(prefsItem);
+
+        const v = this._metadata?.version ?? '?';
+        const buildTime = this._metadata?._buildTime
+            ? new Date(this._metadata._buildTime).toLocaleString()
+            : 'dev';
+        const versionItem = new PopupMenu.PopupMenuItem(`v${v} · ${buildTime}`, {
+            reactive: false,
+            can_focus: false,
+        });
+        versionItem.label.set_style('font-size: 0.85em; color: #888;');
+        this.menu.addMenuItem(versionItem);
 
         this._panelIconChangedId = this._settings.connect(
             'changed::panel-icon-name',

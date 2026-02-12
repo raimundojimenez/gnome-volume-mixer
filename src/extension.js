@@ -14,6 +14,11 @@ const PANEL_INDICATOR_ID = 'application-volume-mixer';
 export default class VolumeMixerExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
+
+        const v = this.metadata.version ?? '?';
+        const build = this.metadata._buildTime ?? 'unknown';
+        console.log(`[${this.metadata.uuid}] v${v} enabled (build: ${build})`);
+
         this._menuAttachSourceId = null;
         this._menuAttachRetries = 0;
         this._menuAttached = false;
@@ -133,7 +138,8 @@ export default class VolumeMixerExtension extends Extension {
                 this._settings,
                 () => this.openPreferences(),
                 this.path,
-                this.metadata.uuid
+                this.metadata.uuid,
+                this.metadata
             );
             panel.addToStatusArea(PANEL_INDICATOR_ID, this._panelIndicator, 1, 'right');
             return true;
@@ -202,7 +208,6 @@ export default class VolumeMixerExtension extends Extension {
         if (!this._boostIndicator)
             return;
 
-        this._boostIndicator.quickSettingsItems.forEach(item => item.destroy());
         this._boostIndicator.destroy();
         this._boostIndicator = null;
     }

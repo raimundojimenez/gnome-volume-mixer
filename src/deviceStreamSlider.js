@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -46,8 +47,10 @@ export class DeviceStreamSlider {
         this._label = new St.Label({
             text: this._noDeviceText(),
             y_align: Clutter.ActorAlign.CENTER,
+            x_expand: false,
         });
-        this._label.set_style('min-width: 120px;');
+        this._label.set_width(150);
+        this._label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         row.add_child(this._label);
 
         this._slider = new Slider(0);

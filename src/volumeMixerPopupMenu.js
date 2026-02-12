@@ -1,4 +1,5 @@
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Gvc from 'gi://Gvc';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -61,14 +62,34 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._loadSavedVolumes();
 
         // MixerControl may still be connecting to PulseAudio/PipeWire;
-        // get_streams() returns empty until state reaches READY
-        const state = this._control.get_state?.() ?? null;
-        if (state === Gvc.MixerControlState.READY) {
+        // get_streams() returns empty until state reaches READY.
+        // During disable/enable reload, the shared MixerControl singleton is
+        // already READY but get_state() may return an integer that doesn't ===
+        // match the GJS enum symbol, so we use multiple checks.
+        const state = this._control.get_state?.() ?? this._control.state ?? null;
+        const isReady = state === Gvc.MixerControlState.READY
+            || state === 1  // numeric fallback for READY enum value
+            || (state != null && this._control.get_streams?.().length > 0);
+
+        console.log(`[volume-mixer] MixerControl state at init: ${state} (READY=${Gvc.MixerControlState.READY}, type=${typeof state}, isReady=${isReady})`);
+
+        if (isReady) {
             this._refreshDeviceSliders();
             this._updateStreams();
         } else {
             this._stateChangedId = this._control.connect('state-changed',
                 (_control, newState) => this._onStateChanged(newState));
+            // Safety net: re-check after 500ms in case state-changed never fires
+            this._stateCheckSourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                this._stateCheckSourceId = null;
+                if (Object.keys(this._applicationStreams).length === 0) {
+                    console.log('[volume-mixer] Safety-net timeout: forcing stream enumeration');
+                    this._disconnectStateChanged();
+                    this._refreshDeviceSliders();
+                    this._updateStreams();
+                }
+                return GLib.SOURCE_REMOVE;
+            });
         }
     }
 
@@ -77,7 +98,13 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
             return;
 
         const stream = control.lookup_stream_id(id);
-        if (!stream || stream.is_event_stream || !(stream instanceof Gvc.MixerSinkInput))
+        if (!stream)
+            return;
+
+        const isEvent = typeof stream.is_event_stream === 'function'
+            ? stream.is_event_stream()
+            : (stream.is_event_stream ?? false);
+        if (isEvent || !this._isSinkInput(stream))
             return;
 
         if (!this._shouldShowStream(stream))
@@ -103,6 +130,27 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._syncEmptyState();
     }
 
+    _isSinkInput(stream) {
+        // Primary: standard JS instanceof (works when GJS prototype chain matches)
+        if (stream instanceof Gvc.MixerSinkInput)
+            return true;
+
+        // Fallback 1: check the GType name directly
+        const gtypeName = stream.constructor?.$gtype?.name;
+        if (gtypeName === 'GvcMixerSinkInput')
+            return true;
+
+        // Fallback 2: walk the GObject type hierarchy in C-land
+        try {
+            if (stream.constructor?.$gtype && Gvc.MixerSinkInput.$gtype)
+                return GObject.type_is_a(stream.constructor.$gtype, Gvc.MixerSinkInput.$gtype);
+        } catch (_e) {
+            // type_is_a may not be available in all GJS versions
+        }
+
+        return false;
+    }
+
     _shouldShowStream(stream) {
         if (this._filterMode === 'block')
             return this._filteredApps.indexOf(stream.get_name()) === -1;
@@ -124,7 +172,15 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._showStreamDesc = this.settings.get_boolean('show-description');
         this._showStreamIcon = this.settings.get_boolean('show-icon');
 
-        for (const stream of this._control.get_streams()) {
+        const allStreams = this._control.get_streams();
+        console.log(`[volume-mixer] _updateStreams: ${allStreams.length} total streams`);
+        for (const stream of allStreams) {
+            const gtypeName = stream.constructor?.$gtype?.name ?? 'unknown';
+            const name = stream.get_name?.() ?? '?';
+            const isEvent = typeof stream.is_event_stream === 'function'
+                ? stream.is_event_stream()
+                : (stream.is_event_stream ?? false);
+            console.log(`[volume-mixer]   stream id=${stream.get_id()} gtype=${gtypeName} name="${name}" isEvent=${isEvent} isSinkInput=${this._isSinkInput(stream)}`);
             this._streamAdded(this._control, stream.get_id());
         }
 
@@ -135,13 +191,17 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._emptyItem.visible = Object.keys(this._applicationStreams).length === 0;
     }
 
-    _onStateChanged(newState) {
-        if (newState === Gvc.MixerControlState.READY) {
+    _onStateChanged(newStateOrUndefined) {
+        const newState = newStateOrUndefined ?? this._control.get_state?.() ?? null;
+        const isReady = newState === Gvc.MixerControlState.READY || newState === 1;
+        const isFailed = newState === Gvc.MixerControlState.FAILED;
+
+        if (isReady) {
             console.log('[volume-mixer] MixerControl reached READY state');
             this._disconnectStateChanged();
             this._refreshDeviceSliders();
             this._updateStreams();
-        } else if (newState === Gvc.MixerControlState.FAILED) {
+        } else if (isFailed) {
             console.warn('[volume-mixer] MixerControl failed to connect');
             this._disconnectStateChanged();
         }
@@ -289,6 +349,11 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
     }
 
     destroy() {
+        if (this._stateCheckSourceId) {
+            GLib.source_remove(this._stateCheckSourceId);
+            this._stateCheckSourceId = null;
+        }
+
         this._disconnectStateChanged();
 
         if (this._streamAddedEventId) {

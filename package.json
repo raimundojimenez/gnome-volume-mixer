@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "rm -rf dist && mkdir -p dist && glib-compile-schemas schemas && cp -r schemas icons metadata.json src/*.js dist && cd dist && zip -r -p volume-mixer * ",
+    "build": "rm -rf dist && mkdir -p dist && glib-compile-schemas schemas && cp -r schemas icons metadata.json src/*.js dist && node -e \"const f='dist/metadata.json'; const m=JSON.parse(require('fs').readFileSync(f)); m._buildTime=new Date().toISOString(); require('fs').writeFileSync(f, JSON.stringify(m, null, 2)+'\\n')\" && cd dist && zip -r -p volume-mixer * ",
     "install": "bash scripts/install.sh",
     "reinstall": "bash scripts/install.sh",
     "dev": "bash scripts/install.sh --logs",
