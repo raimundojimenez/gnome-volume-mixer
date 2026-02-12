@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "rm -rf dist && mkdir -p dist && glib-compile-schemas schemas && cp -r schemas icons metadata.json src/*.js dist && cd dist && zip -r -p volume-mixer * "
+    "build": "rm -rf dist && mkdir -p dist && glib-compile-schemas schemas && cp -r schemas icons metadata.json src/*.js dist && cd dist && zip -r -p volume-mixer * ",
+    "install": "bash scripts/install.sh",
+    "reinstall": "bash scripts/install.sh",
+    "dev": "bash scripts/install.sh --logs",
+    "logs": "journalctl /usr/bin/gnome-shell --since '1 minute ago' -f -o cat"
   },
   "author": "",
   "license": "MIT",

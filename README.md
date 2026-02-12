@@ -27,23 +27,40 @@ This fork keeps the same user-facing goal (per-app volume control) with a modern
 - GNOME Shell: `45`, `46`, `47`, `48`, `49`
 - Extension UUID (this fork): `volume-mixer@raimundojimenez.es`
 
+## Troubleshooting Notes
+
+- Runtime incident notes (panel icon, boost toggle duplication, design decisions, follow-up actions): `docs/gnome49-runtime-notes-2026-02-12.md`
+
 ### Install
 
 This fork has a different UUID than the original extension and is distributed separately from the archived upstream listing.
 
-## Build and Install Manually
+## Build and Install
 
 ```bash
 npm ci
-npm run build
-gnome-extensions install --force dist/volume-mixer.zip
-gnome-extensions enable volume-mixer@raimundojimenez.es
+npm run install
 ```
 
-On Fedora systems with SELinux enforcing, relabel after install if the extension is not detected:
+This runs the full pipeline: build, `gnome-extensions install --force`, SELinux `restorecon` (Fedora/RHEL — skipped automatically on other systems), and extension reload via disable/enable cycle.
+
+For development with live GNOME Shell journal output:
 
 ```bash
-restorecon -RFv ~/.local/share/gnome-shell/extensions/volume-mixer@raimundojimenez.es
+npm run dev
 ```
 
-If the extension still does not appear, log out and log back in to reload GNOME Shell extension discovery.
+### Available Scripts
+
+| Script | Description |
+|---|---|
+| `npm run build` | Build extension zip to `dist/` |
+| `npm run install` | Build + install + SELinux fix + reload |
+| `npm run dev` | Install + tail GNOME Shell journal logs |
+| `npm run logs` | Tail GNOME Shell journal (no install) |
+
+> **Note:** Most changes take effect immediately after the disable/enable reload. Structural changes (new GObject types, new imports) may require a full logout/login.
+
+### SELinux on Fedora
+
+On Fedora, `gnome-extensions install` extracts the zip through a cache path, and the resulting files inherit the `cache_home_t` SELinux context instead of `data_home_t`. GNOME Shell cannot load extensions with the wrong context. The install script detects this and runs `restorecon -RFv` automatically. On non-SELinux systems (Ubuntu, Arch), this step is skipped.
