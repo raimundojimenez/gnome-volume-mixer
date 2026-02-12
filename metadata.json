@@ -5,5 +5,6 @@
   "version": 2,
   "name": "Application Volume Mixer",
   "description": "Control volume output per-application",
+  "icon": "volume-mixer-symbolic",
   "url": "https://github.com/raimundojimenez"
 }

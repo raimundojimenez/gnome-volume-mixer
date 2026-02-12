@@ -79,6 +79,8 @@ export default class VolumeMixerExtension extends Extension {
 
         this._destroyPanelIndicator();
         this._destroyBoostIndicator();
+        this._cleanupStalePanelIndicator();
+        this._cleanupOrphanBoostIndicators();
 
         if (this._volumeMixer !== null) {
             this._volumeMixer.destroy();
@@ -106,17 +108,42 @@ export default class VolumeMixerExtension extends Extension {
         const shouldShowPanelIcon = this._settings?.get_boolean('show-panel-icon');
         if (!shouldShowPanelIcon) {
             this._destroyPanelIndicator();
-            return;
+            this._cleanupStalePanelIndicator();
+            return true;
         }
 
+        this._cleanupStalePanelIndicator();
         if (this._panelIndicator)
-            return;
+            return true;
 
-        this._panelIndicator = new VolumeMixerPanelIndicator(
-            this._settings,
-            () => this.openPreferences()
-        );
-        Main.panel.addToStatusArea(PANEL_INDICATOR_ID, this._panelIndicator, 1, 'right');
+        const panel = Main.panel;
+        if (!panel || typeof panel.addToStatusArea !== 'function')
+            return false;
+
+        const existing = panel.statusArea?.[PANEL_INDICATOR_ID];
+        if (existing && !this._isOurPanelIndicator(existing)) {
+            console.warn(
+                `[${this.metadata.uuid}] Panel indicator id "${PANEL_INDICATOR_ID}" is already in use.`
+            );
+            return false;
+        }
+
+        try {
+            this._panelIndicator = new VolumeMixerPanelIndicator(
+                this._settings,
+                () => this.openPreferences(),
+                this.path,
+                this.metadata.uuid
+            );
+            panel.addToStatusArea(PANEL_INDICATOR_ID, this._panelIndicator, 1, 'right');
+            return true;
+        } catch (error) {
+            console.warn(
+                `[${this.metadata.uuid}] Unable to attach panel indicator: ${error}`
+            );
+            this._destroyPanelIndicator();
+            return false;
+        }
     }
 
     _destroyPanelIndicator() {
@@ -127,21 +154,46 @@ export default class VolumeMixerExtension extends Extension {
         this._panelIndicator = null;
     }
 
+    _cleanupStalePanelIndicator() {
+        const existing = Main.panel?.statusArea?.[PANEL_INDICATOR_ID];
+        if (!existing || existing === this._panelIndicator)
+            return;
+
+        if (!this._isOurPanelIndicator(existing))
+            return;
+
+        try {
+            existing.destroy();
+        } catch (error) {
+            console.warn(
+                `[${this.metadata.uuid}] Unable to destroy stale panel indicator: ${error}`
+            );
+        }
+    }
+
+    _isOurPanelIndicator(indicator) {
+        return indicator instanceof VolumeMixerPanelIndicator ||
+            indicator?._volumeMixerOwnerUuid === this.metadata.uuid ||
+            indicator?.constructor?.name === 'VolumeMixerPanelIndicator';
+    }
+
     _syncBoostIndicator() {
         const shouldShowBoostToggle = this._settings?.get_boolean('enable-boost-toggle');
         if (!shouldShowBoostToggle) {
             this._destroyBoostIndicator();
+            this._cleanupOrphanBoostIndicators();
             return true;
         }
 
+        this._cleanupOrphanBoostIndicators();
         if (this._boostIndicator)
             return true;
 
-        const quickSettings = Main.panel?.statusArea?.quickSettings;
+        const quickSettings = this._getQuickSettings();
         if (!quickSettings || typeof quickSettings.addExternalIndicator !== 'function')
             return false;
 
-        this._boostIndicator = new VolumeBoostIndicator();
+        this._boostIndicator = new VolumeBoostIndicator(this.metadata.uuid);
         quickSettings.addExternalIndicator(this._boostIndicator);
         return true;
     }
@@ -154,8 +206,60 @@ export default class VolumeMixerExtension extends Extension {
         this._boostIndicator = null;
     }
 
+    _cleanupOrphanBoostIndicators() {
+        const quickSettings = this._getQuickSettings();
+        const indicators = quickSettings?._indicators?.get_children?.() ?? [];
+        for (const indicator of indicators) {
+            if (!this._isOurBoostIndicator(indicator))
+                continue;
+
+            if (indicator === this._boostIndicator)
+                continue;
+
+            try {
+                indicator.destroy();
+            } catch (error) {
+                console.warn(
+                    `[${this.metadata.uuid}] Unable to destroy stale boost indicator: ${error}`
+                );
+            }
+        }
+    }
+
+    _isOurBoostIndicator(indicator) {
+        if (!indicator)
+            return false;
+
+        if (indicator instanceof VolumeBoostIndicator)
+            return true;
+
+        if (indicator?._volumeMixerOwnerUuid === this.metadata.uuid)
+            return true;
+
+        if (indicator?.constructor?.name === 'VolumeBoostIndicator')
+            return true;
+
+        const quickSettingsItems = indicator.quickSettingsItems ?? [];
+        for (const item of quickSettingsItems) {
+            if (item?._volumeMixerOwnerUuid === this.metadata.uuid)
+                return true;
+
+            if (item?.constructor?.name === 'VolumeBoostToggle')
+                return true;
+
+            if (item?.title === 'Volume Boost' && item?.iconName === 'audio-volume-high-symbolic')
+                return true;
+        }
+
+        return false;
+    }
+
+    _getQuickSettings() {
+        return Main.panel?.statusArea?.quickSettings ?? null;
+    }
+
     _getVolumeMenu() {
-        const quickSettings = Main.panel?.statusArea?.quickSettings;
+        const quickSettings = this._getQuickSettings();
         const quickSettingsMenuCandidates = [
             quickSettings?._volumeOutput?._output?.menu,
             quickSettings?._volumeOutput?.quickSettingsItems?.[0]?.menu,

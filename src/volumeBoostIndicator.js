@@ -5,12 +5,13 @@ import {QuickToggle, SystemIndicator} from 'resource:///org/gnome/shell/ui/quick
 
 const VolumeBoostToggle = GObject.registerClass(
 class VolumeBoostToggle extends QuickToggle {
-    _init() {
+    _init(ownerUuid) {
         super._init({
             title: 'Volume Boost',
             iconName: 'audio-volume-high-symbolic',
             toggleMode: true,
         });
+        this._volumeMixerOwnerUuid = ownerUuid;
 
         this._soundSettings = new Gio.Settings({
             schema_id: 'org.gnome.desktop.sound',
@@ -27,10 +28,11 @@ class VolumeBoostToggle extends QuickToggle {
 
 export const VolumeBoostIndicator = GObject.registerClass(
 class VolumeBoostIndicator extends SystemIndicator {
-    _init() {
+    _init(ownerUuid) {
         super._init();
+        this._volumeMixerOwnerUuid = ownerUuid;
 
-        this._toggle = new VolumeBoostToggle();
+        this._toggle = new VolumeBoostToggle(ownerUuid);
         this.quickSettingsItems.push(this._toggle);
     }
 });

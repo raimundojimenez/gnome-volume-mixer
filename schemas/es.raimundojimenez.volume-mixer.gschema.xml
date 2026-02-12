@@ -21,7 +21,7 @@
       <default>true</default>
     </key>
     <key name="panel-icon-name" type="s">
-      <default>'audio-x-generic-symbolic'</default>
+      <default>'volume-mixer-symbolic'</default>
     </key>
     <key name="enable-boost-toggle" type="b">
       <default>true</default>

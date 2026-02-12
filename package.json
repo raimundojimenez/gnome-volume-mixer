@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "rm -rf dist && mkdir -p dist && glib-compile-schemas schemas && cp -r schemas metadata.json src/*.js dist && cd dist && zip -r -p volume-mixer * "
+    "build": "rm -rf dist && mkdir -p dist && glib-compile-schemas schemas && cp -r schemas icons metadata.json src/*.js dist && cd dist && zip -r -p volume-mixer * "
   },
   "author": "",
   "license": "MIT",
