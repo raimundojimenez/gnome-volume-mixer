@@ -1,15 +1,9 @@
-'use strict';
+import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import { VolumeMixerPrefsPage } from './volumeMixerPrefsPage';
+import {VolumeMixerPrefsPage} from './volumeMixerPrefsPage.js';
 
-function init() {
-}
-
-function fillPreferencesWindow(window) {
-    window.add(new VolumeMixerPrefsPage());
-}
-
-export default {
-    init,
-    fillPreferencesWindow
+export default class VolumeMixerPreferences extends ExtensionPreferences {
+    fillPreferencesWindow(window) {
+        window.add(new VolumeMixerPrefsPage(this.getSettings()));
+    }
 }

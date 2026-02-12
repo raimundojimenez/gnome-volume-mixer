@@ -1,8 +1,9 @@
 {
-  "shell-version": ["42"],
-  "uuid": "volume-mixer@evermiss.net",
-  "orginal-author": "mymindstorm@evermiss.net",
+  "shell-version": ["45", "46", "47", "48", "49"],
+  "uuid": "volume-mixer@raimundojimenez.es",
+  "settings-schema": "es.raimundojimenez.volume-mixer",
+  "orginal-author": "raimundojimenez@raimundojimenez.es",
   "name": "Application Volume Mixer",
   "description": "Control volume output per-application",
-  "url": "https://github.com/mymindstorm/gnome-volume-mixer"
+  "url": "https://github.com/raimundojimenez"
 }

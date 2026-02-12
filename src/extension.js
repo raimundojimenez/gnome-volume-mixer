@@ -1,29 +1,70 @@
-'use strict';
+import GLib from 'gi://GLib';
 
-import { VolumeMixerPopupMenu } from "./volumeMixerPopupMenu";
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const Main = imports.ui.main;
+import {VolumeMixerPopupMenu} from './volumeMixerPopupMenu.js';
 
-var volumeMixer = null;
+const MENU_ATTACH_RETRY_MS = 200;
+const MENU_ATTACH_RETRY_COUNT = 25;
 
-function enable() {
-    volumeMixer = new VolumeMixerPopupMenu();
+export default class VolumeMixerExtension extends Extension {
+    enable() {
+        this._menuAttachSourceId = null;
+        this._menuAttachRetries = 0;
+        this._volumeMixer = new VolumeMixerPopupMenu(this.getSettings());
 
-    Main.panel.statusArea.aggregateMenu._volume.menu.addMenuItem(volumeMixer);
-}
+        if (!this._attachMenuSection()) {
+            this._menuAttachSourceId = GLib.timeout_add(
+                GLib.PRIORITY_DEFAULT,
+                MENU_ATTACH_RETRY_MS,
+                () => {
+                    if (this._attachMenuSection()) {
+                        this._menuAttachSourceId = null;
+                        return GLib.SOURCE_REMOVE;
+                    }
 
-function disable() {
-    // REMINDER: It's required for extensions to clean up after themselves when
-    // they are disabled. This is required for approval during review!
-    if (volumeMixer !== null) {
-        volumeMixer.destroy();
-        volumeMixer = null;
+                    this._menuAttachRetries++;
+                    if (this._menuAttachRetries >= MENU_ATTACH_RETRY_COUNT) {
+                        this._menuAttachSourceId = null;
+                        console.warn(`[${this.metadata.uuid}] Unable to attach volume mixer menu section`);
+                        return GLib.SOURCE_REMOVE;
+                    }
+
+                    return GLib.SOURCE_CONTINUE;
+                }
+            );
+        }
     }
-}
 
-export default function() {
-    return {
-        enable,
-        disable
+    disable() {
+        if (this._menuAttachSourceId !== null) {
+            GLib.Source.remove(this._menuAttachSourceId);
+            this._menuAttachSourceId = null;
+        }
+
+        if (this._volumeMixer !== null) {
+            this._volumeMixer.destroy();
+            this._volumeMixer = null;
+        }
+    }
+
+    _attachMenuSection() {
+        const volumeMenu = this._getVolumeMenu();
+        if (!volumeMenu || !this._volumeMixer)
+            return false;
+
+        volumeMenu.addMenuItem(this._volumeMixer);
+        return true;
+    }
+
+    _getVolumeMenu() {
+        const quickSettingsVolumeMenu =
+            Main.panel?.statusArea?.quickSettings?._volumeOutput?.item?.menu;
+        if (quickSettingsVolumeMenu)
+            return quickSettingsVolumeMenu;
+
+        // GNOME <= 42 fallback.
+        return Main.panel?.statusArea?.aggregateMenu?._volume?.menu ?? null;
     }
 }

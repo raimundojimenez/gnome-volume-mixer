@@ -1,13 +1,9 @@
-'use strict';
-
-const { Gtk, GObject } = imports.gi;
+import GObject from 'gi://GObject';
+import Gtk from 'gi://Gtk';
 
 export const VolumeMixerAddFilterDialog = GObject.registerClass({
     GTypeName: 'VolumeMixerAddFilterDialog',
 }, class VolumeMixerAddFilterDialog extends Gtk.Dialog {
-    appNameEntry;
-    filterListData;
-
     constructor(callingWidget, filterListData) {
         super({
             use_header_bar: true,
@@ -15,38 +11,37 @@ export const VolumeMixerAddFilterDialog = GObject.registerClass({
             destroy_with_parent: true,
             modal: true,
             resizable: false,
-            title: "Add Filtered Application"
+            title: 'Add Filtered Application',
         });
 
         this.filterListData = filterListData;
 
-        const addButton = this.add_button("Add", Gtk.ResponseType.OK);
+        const addButton = this.add_button('Add', Gtk.ResponseType.OK);
         addButton.get_style_context().add_class('suggested-action');
         addButton.sensitive = false;
-        this.add_button("Cancel", Gtk.ResponseType.CANCEL);
+        this.add_button('Cancel', Gtk.ResponseType.CANCEL);
 
         const dialogContent = this.get_content_area();
-        dialogContent.margin_top = 20
-        dialogContent.margin_bottom = 20
-        dialogContent.margin_end = 20
-        dialogContent.margin_start = 20
+        dialogContent.margin_top = 20;
+        dialogContent.margin_bottom = 20;
+        dialogContent.margin_end = 20;
+        dialogContent.margin_start = 20;
 
         const appNameLabel = new Gtk.Label({
-            label: "Application name",
+            label: 'Application name',
             halign: Gtk.Align.START,
-            margin_bottom: 10
+            margin_bottom: 10,
         });
         dialogContent.append(appNameLabel);
 
         this.appNameEntry = new Gtk.Entry();
         this.appNameEntry.connect('activate', () => {
-            if (this.checkInputValid()) {
-                this.response(Gtk.ResponseType.OK)
-            }
-        })
+            if (this.checkInputValid())
+                this.response(Gtk.ResponseType.OK);
+        });
         dialogContent.append(this.appNameEntry);
 
-        this.appNameEntry.connect("changed", () => {
+        this.appNameEntry.connect('changed', () => {
             addButton.sensitive = this.checkInputValid();
         });
     }

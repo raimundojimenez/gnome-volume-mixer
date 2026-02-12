@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="net.evermiss.mymindstorm.volume-mixer" path="/net/evermiss/mymindstorm/volume-mixer/">
+  <schema id="es.raimundojimenez.volume-mixer" path="/es/raimundojimenez/volume-mixer/">
     <key name="filtered-apps" type="as">
       <default>[]</default>
     </key>

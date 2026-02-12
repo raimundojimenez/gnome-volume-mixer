@@ -1,25 +1,19 @@
-'use strict';
+import Gvc from 'gi://Gvc';
 
-import { ApplicationStreamSlider } from "./applicationStreamSlider";
+import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 
-const { Settings, SettingsSchemaSource } = imports.gi.Gio;
-const { MixerSinkInput } = imports.gi.Gvc;
-
-// https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/js/ui/popupMenu.js
-const PopupMenu = imports.ui.popupMenu;
-// https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/js/ui/status/volume.js
-const Volume = imports.ui.status.volume;
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+import {ApplicationStreamSlider} from './applicationStreamSlider.js';
 
 export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
-    constructor() {
+    constructor(settings) {
         super();
+        this.settings = settings;
         this._applicationStreams = {};
 
         // The PopupSeparatorMenuItem needs something above and below it or it won't display
         this._hiddenItem = new PopupMenu.PopupBaseMenuItem();
-        this._hiddenItem.set_height(0)
+        this._hiddenItem.set_height(0);
         this.addMenuItem(this._hiddenItem);
 
         this.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -27,16 +21,6 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._control = Volume.getMixerControl();
         this._streamAddedEventId = this._control.connect("stream-added", this._streamAdded.bind(this));
         this._streamRemovedEventId = this._control.connect("stream-removed", this._streamRemoved.bind(this));
-
-        let gschema = SettingsSchemaSource.new_from_directory(
-            Me.dir.get_child('schemas').get_path(),
-            SettingsSchemaSource.get_default(),
-            false
-        );
-
-        this.settings = new Settings({
-            settings_schema: gschema.lookup('net.evermiss.mymindstorm.volume-mixer', true)
-        });
 
         this._settingsChangedId = this.settings.connect('changed', () => this._updateStreams());
 
@@ -50,7 +34,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
 
         const stream = control.lookup_stream_id(id);
 
-        if (stream.is_event_stream || !(stream instanceof MixerSinkInput)) {
+        if (stream.is_event_stream || !(stream instanceof Gvc.MixerSinkInput)) {
             return;
         }
 
@@ -87,7 +71,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._showStreamIcon = this.settings.get_boolean("show-icon");
 
         for (const stream of this._control.get_streams()) {
-            this._streamAdded(this._control, stream.get_id())
+            this._streamAdded(this._control, stream.get_id());
         }
     }
 
