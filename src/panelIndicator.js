@@ -27,6 +27,8 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
         });
         this.add_child(this._icon);
 
+        this.menu.box.set_style('min-width: 300px;');
+
         this._mixerSection = new VolumeMixerPopupMenu(this._settings);
         this.menu.addMenuItem(this._mixerSection);
 

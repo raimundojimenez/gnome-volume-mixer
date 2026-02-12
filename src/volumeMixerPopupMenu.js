@@ -76,6 +76,16 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         if (isReady) {
             this._refreshDeviceSliders();
             this._updateStreams();
+            // PipeWire may register sink inputs after MixerControl reaches READY;
+            // schedule a delayed re-check to catch late-arriving streams.
+            this._streamRecheckId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 2000, () => {
+                this._streamRecheckId = null;
+                if (Object.keys(this._applicationStreams).length === 0) {
+                    console.log('[volume-mixer] Delayed re-check: retrying stream enumeration');
+                    this._updateStreams();
+                }
+                return GLib.SOURCE_REMOVE;
+            });
         } else {
             this._stateChangedId = this._control.connect('state-changed',
                 (_control, newState) => this._onStateChanged(newState));
@@ -104,11 +114,18 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         const isEvent = typeof stream.is_event_stream === 'function'
             ? stream.is_event_stream()
             : (stream.is_event_stream ?? false);
-        if (isEvent || !this._isSinkInput(stream))
+        const isSinkInput = this._isSinkInput(stream);
+        if (isEvent || !isSinkInput) {
+            const name = stream.get_name?.() ?? '?';
+            const gtype = stream.constructor?.$gtype?.name ?? 'unknown';
+            console.log(`[volume-mixer] Rejected stream id=${id} name="${name}" gtype=${gtype} isEvent=${isEvent} isSinkInput=${isSinkInput}`);
             return;
+        }
 
-        if (!this._shouldShowStream(stream))
+        if (!this._shouldShowStream(stream)) {
+            console.log(`[volume-mixer] Filtered stream id=${id} name="${stream.get_name?.()}" by ${this._filterMode} list`);
             return;
+        }
 
         this._applySavedStateToStream(stream);
 
@@ -352,6 +369,11 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         if (this._stateCheckSourceId) {
             GLib.source_remove(this._stateCheckSourceId);
             this._stateCheckSourceId = null;
+        }
+
+        if (this._streamRecheckId) {
+            GLib.source_remove(this._streamRecheckId);
+            this._streamRecheckId = null;
         }
 
         this._disconnectStateChanged();

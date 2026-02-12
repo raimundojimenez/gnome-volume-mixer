@@ -21,11 +21,17 @@ export class ApplicationStreamSlider {
             can_focus: false,
         });
 
-        const row = new St.BoxLayout({
+        const column = new St.BoxLayout({
+            vertical: true,
+            x_expand: true,
+        });
+        this.item.add_child(column);
+
+        const headerRow = new St.BoxLayout({
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this.item.add_child(row);
+        column.add_child(headerRow);
 
         this._icon = new St.Icon({
             style_class: 'popup-menu-icon',
@@ -42,7 +48,7 @@ export class ApplicationStreamSlider {
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._iconButton.connect('clicked', () => this._toggleMute());
-        row.add_child(this._iconButton);
+        headerRow.add_child(this._iconButton);
 
         const name = stream.get_name();
         const description = stream.get_description();
@@ -50,20 +56,15 @@ export class ApplicationStreamSlider {
             this._label = new St.Label({
                 text: name && opts.showDesc ? `${name} - ${description}` : (name || description),
                 y_align: Clutter.ActorAlign.CENTER,
-                x_expand: false,
+                x_expand: true,
             });
-            this._label.set_width(150);
             this._label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            row.add_child(this._label);
+            headerRow.add_child(this._label);
         }
 
         this._slider = new Slider(0);
-        this._sliderBin = new St.Bin({
-            x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER,
-            child: this._slider,
-        });
-        row.add_child(this._sliderBin);
+        this._slider.x_expand = true;
+        column.add_child(this._slider);
 
         this._sliderChangedId = this._slider.connect('notify::value',
             () => this._sliderChanged());
