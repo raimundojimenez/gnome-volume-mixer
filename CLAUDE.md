@@ -103,6 +103,14 @@ Never include `Co-Authored-By` lines in commit messages.
 
 ## Debugging
 
-Extension logs to GNOME Shell journal with `[volume-mixer@raimundojimenez.es]` prefix. Use `console.log()` / `console.warn()` in source. Runtime notes and past incident analysis in `docs/gnome49-runtime-notes-2026-02-12.md`.
+Extension logs to GNOME Shell journal with `[volume-mixer@raimundojimenez.es]` prefix. Use `console.log()` / `console.warn()` in source. Runtime notes and past incident analysis in `docs/gnome49-runtime-notes-2026-02-12.md`; GNOME 50 compatibility, the Looking Glass reload technique, and lessons learned in `docs/gnome50-compat-2026-06-15.md`.
+
+**Metadata-only changes** (e.g. bumping `shell-version`/`version`) are cached in-memory by the running shell — `disable`/`enable` and `gnome-extensions info` do **not** re-read `metadata.json` from disk. Force a fresh read without logout/login from Looking Glass (`Alt+F2` → `lg`):
+
+```js
+Main.extensionManager.reloadExtension(Main.extensionManager.lookup('volume-mixer@raimundojimenez.es'))
+```
+
+This also loads new code **only** if the extension wasn't already imported this session (e.g. it was OUT OF DATE). The DBus `ReloadExtension` method is dead on GNOME 50 (`NotSupported`), and `Eval` is gated behind `unsafe_mode`. For ordinary `*.js` edits to an already-loaded extension, the ESModule cache still requires logout/login.
 
 On PipeWire, `MixerControl` reaches `READY` before all sink input streams are registered. The extension schedules a delayed re-check (2s) to catch late-arriving streams. Check rejection logs (`[volume-mixer] Rejected stream`) to verify stream type detection.
