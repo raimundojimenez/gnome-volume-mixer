@@ -1,8 +1,8 @@
 {
-  "shell-version": ["45", "46", "47", "48", "49"],
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
   "uuid": "volume-mixer@raimundojimenez.es",
   "settings-schema": "es.raimundojimenez.volume-mixer",
-  "version": 2,
+  "version": 3,
   "name": "Application Volume Mixer",
   "description": "Control volume output per-application",
   "icon": "audio-speakers-symbolic",

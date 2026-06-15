@@ -9,9 +9,12 @@ import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 const UNMUTE_DEFAULT_VOLUME = 0.25;
 
 export class DeviceStreamSlider {
-    constructor(deviceType) {
+    constructor(deviceType, opts = {}) {
         this._deviceType = deviceType; // 'output' or 'input'
         this._control = Volume.getMixerControl();
+        this._getVolumeMax = typeof opts.getVolumeMax === 'function'
+            ? opts.getVolumeMax
+            : () => this._control?.get_vol_max_norm?.() ?? 1;
         this._stream = null;
         this._streamMutedChangedId = null;
         this._streamVolumeChangedId = null;
@@ -103,13 +106,30 @@ export class DeviceStreamSlider {
         return this._stream?.is_muted ?? this._stream?.isMuted ?? false;
     }
 
+    _currentMaxVolume() {
+        const maxVolume = Number(this._getVolumeMax(this._stream, this._deviceType));
+        if (Number.isFinite(maxVolume) && maxVolume > 0)
+            return maxVolume;
+
+        const fallback = this._control?.get_vol_max_norm?.() ?? 1;
+        return fallback > 0 ? fallback : 1;
+    }
+
+    _normalizedVolume(volume) {
+        const maxVolume = this._currentMaxVolume();
+        if (maxVolume <= 0)
+            return 0;
+
+        return Math.min(Math.max(volume / maxVolume, 0), 1);
+    }
+
     _toggleMute() {
         if (!this._stream)
             return;
 
         const wasMuted = this._streamIsMuted();
         if (wasMuted && this._stream.volume === 0) {
-            this._stream.volume = UNMUTE_DEFAULT_VOLUME * this._control.get_vol_max_norm();
+            this._stream.volume = UNMUTE_DEFAULT_VOLUME * this._currentMaxVolume();
             this._stream.push_volume();
         }
 
@@ -120,7 +140,7 @@ export class DeviceStreamSlider {
         if (!this._stream || this._syncing)
             return;
 
-        const volume = this._slider.value * this._control.get_vol_max_norm();
+        const volume = this._slider.value * this._currentMaxVolume();
         if (volume < 1) {
             this._stream.volume = 0;
             this._stream.change_is_muted(true);
@@ -144,7 +164,7 @@ export class DeviceStreamSlider {
         this._syncing = true;
         this._slider.value = this._streamIsMuted()
             ? 0
-            : this._stream.volume / this._control.get_vol_max_norm();
+            : this._normalizedVolume(this._stream.volume);
         this._syncing = false;
         this._refreshIcon();
     }
@@ -159,7 +179,7 @@ export class DeviceStreamSlider {
 
         const muted = this._streamIsMuted();
         const volume = this._stream.volume;
-        const maxVolume = this._control.get_vol_max_norm();
+        const maxVolume = this._currentMaxVolume();
 
         if (this._deviceType === 'input') {
             this._icon.icon_name = muted || volume <= 0
@@ -185,6 +205,10 @@ export class DeviceStreamSlider {
         }
 
         this._icon.icon_name = 'audio-volume-high-symbolic';
+    }
+
+    refreshVolumeScale() {
+        this._syncFromStream();
     }
 
     _disconnectStream() {

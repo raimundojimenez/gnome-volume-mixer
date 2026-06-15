@@ -24,12 +24,13 @@ This fork keeps the same user-facing goal (per-app volume control) with a modern
 
 ## Compatibility
 
-- GNOME Shell: `45`, `46`, `47`, `48`, `49`
+- GNOME Shell: `45`, `46`, `47`, `48`, `49`, `50`
 - Extension UUID (this fork): `volume-mixer@raimundojimenez.es`
 
 ## Troubleshooting Notes
 
 - Runtime incident notes (panel icon, boost toggle duplication, design decisions, follow-up actions): `docs/gnome49-runtime-notes-2026-02-12.md`
+- GNOME Shell 50 compatibility notes (shell-version bump, boost persistence scale fix): `docs/gnome50-compat-2026-06-15.md`
 
 ### Install
 

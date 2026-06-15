@@ -29,8 +29,29 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
 
         this.menu.box.set_style('min-width: 300px;');
 
-        this._mixerSection = new VolumeMixerPopupMenu(this._settings);
+        this._mixerSection = new VolumeMixerPopupMenu(this._settings, {
+            ownerUuid: ownerUuid,
+            surface: 'panel-popup',
+        });
         this.menu.addMenuItem(this._mixerSection);
+
+        this._soundSettings = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.sound',
+        });
+        this._syncingBoostSwitch = false;
+        this._boostSwitch = new PopupMenu.PopupSwitchMenuItem(
+            'Volume Boost',
+            this._soundSettings.get_boolean('allow-volume-above-100-percent')
+        );
+        this._boostSwitchToggledId = this._boostSwitch.connect(
+            'toggled',
+            (_item, state) => this._onBoostSwitchToggled(state)
+        );
+        this._boostChangedId = this._soundSettings.connect(
+            'changed::allow-volume-above-100-percent',
+            () => this._syncBoostSwitchFromSettings()
+        );
+        this.menu.addMenuItem(this._boostSwitch);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         const prefsItem = new PopupMenu.PopupMenuItem('Preferences');
@@ -53,6 +74,26 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
             () => this._refreshIcon()
         );
         this._refreshIcon();
+    }
+
+    _onBoostSwitchToggled(state) {
+        if (this._syncingBoostSwitch)
+            return;
+
+        this._soundSettings.set_boolean('allow-volume-above-100-percent', Boolean(state));
+    }
+
+    _syncBoostSwitchFromSettings() {
+        if (!this._boostSwitch || !this._soundSettings)
+            return;
+
+        const nextState = this._soundSettings.get_boolean('allow-volume-above-100-percent');
+        this._syncingBoostSwitch = true;
+        if (typeof this._boostSwitch.setToggleState === 'function')
+            this._boostSwitch.setToggleState(nextState);
+        else
+            this._boostSwitch.state = nextState;
+        this._syncingBoostSwitch = false;
     }
 
     _refreshIcon() {
@@ -112,6 +153,17 @@ class VolumeMixerPanelIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        if (this._boostSwitch && this._boostSwitchToggledId) {
+            this._boostSwitch.disconnect(this._boostSwitchToggledId);
+            this._boostSwitchToggledId = null;
+        }
+
+        if (this._soundSettings && this._boostChangedId) {
+            this._soundSettings.disconnect(this._boostChangedId);
+            this._boostChangedId = null;
+        }
+        this._soundSettings = null;
+
         if (this._panelIconChangedId) {
             this._settings.disconnect(this._panelIconChangedId);
             this._panelIconChangedId = null;

@@ -22,7 +22,10 @@ export default class VolumeMixerExtension extends Extension {
         this._menuAttachSourceId = null;
         this._menuAttachRetries = 0;
         this._menuAttached = false;
-        this._volumeMixer = new VolumeMixerPopupMenu(this._settings);
+        this._volumeMixer = new VolumeMixerPopupMenu(this._settings, {
+            ownerUuid: this.metadata.uuid,
+            surface: 'quick-settings',
+        });
         this._panelIndicator = null;
         this._boostIndicator = null;
 
@@ -86,6 +89,7 @@ export default class VolumeMixerExtension extends Extension {
         this._destroyBoostIndicator();
         this._cleanupStalePanelIndicator();
         this._cleanupOrphanBoostIndicators();
+        this._cleanupStaleQuickSettingsMixerSections();
 
         if (this._volumeMixer !== null) {
             this._volumeMixer.destroy();
@@ -104,9 +108,56 @@ export default class VolumeMixerExtension extends Extension {
         if (!volumeMenu || !this._volumeMixer)
             return false;
 
+        this._cleanupStaleQuickSettingsMixerSections(volumeMenu);
         volumeMenu.addMenuItem(this._volumeMixer);
         this._menuAttached = true;
         return true;
+    }
+
+    _cleanupStaleQuickSettingsMixerSections(volumeMenu = null) {
+        const menu = volumeMenu ?? this._getVolumeMenu();
+        if (!menu)
+            return;
+
+        for (const item of this._getMenuItems(menu)) {
+            if (item === this._volumeMixer)
+                continue;
+
+            if (!this._isOurQuickSettingsMixerSection(item))
+                continue;
+
+            try {
+                item.destroy();
+            } catch (error) {
+                console.warn(
+                    `[${this.metadata.uuid}] Unable to destroy stale mixer section: ${error}`
+                );
+            }
+        }
+    }
+
+    _isOurQuickSettingsMixerSection(item) {
+        if (!item)
+            return false;
+
+        if (item instanceof VolumeMixerPopupMenu)
+            return true;
+
+        return item?._volumeMixerOwnerUuid === this.metadata.uuid &&
+            item?._volumeMixerSurface === 'quick-settings';
+    }
+
+    _getMenuItems(menu) {
+        if (!menu)
+            return [];
+
+        if (typeof menu._getMenuItems === 'function')
+            return menu._getMenuItems();
+
+        const actors = menu.box?.get_children?.() ?? [];
+        return actors
+            .map(actor => actor?._delegate)
+            .filter(item => Boolean(item));
     }
 
     _syncPanelIndicator() {

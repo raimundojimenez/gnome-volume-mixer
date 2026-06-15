@@ -86,3 +86,44 @@ gnome-extensions enable volume-mixer@raimundojimenez.es
 TS="$(date '+%Y-%m-%d %H:%M:%S')"
 journalctl --user -b --since "$TS" --no-pager | rg -n "volume-mixer|JS ERROR|TypeError|ReferenceError|SyntaxError"
 ```
+
+---
+
+## Session 2: Slider Layout & Stream Detection
+
+### Problems Found
+
+1. **Slider rendered as dot/tiny element.**
+   - Horizontal icon+label+slider layout left ~50px for the slider in a ~350-400px PopupMenu item.
+   - Result: slider was technically present but visually collapsed to a barely-visible dot.
+
+2. **Panel popup had no minimum width.**
+   - Auto-sizing to content provided no floor, further shrinking sliders when label text was short.
+
+3. **"No active application streams" was misread as a bug.**
+   - Actually correct behavior — no apps were playing audio at the time.
+   - `Gvc.MixerControl.get_streams()` returns all stream types; only `GvcMixerSinkInput` represents app audio output.
+
+### Lessons Learned
+
+1. **Never pack Slider horizontally with label+icon.** GNOME's own `StreamSlider` uses a vertical 2-row layout (header above, slider below) specifically because PopupMenu width is limited to ~350-400px. This is a design constraint of the Quick Settings panel, not a style preference.
+
+2. **GJS ESModule caching is total.** `disable()`/`enable()` does NOT reload JS from disk. GJS caches all imported modules in the GNOME Shell process for its entire lifetime. Every code change — even a one-line edit — requires logout/login. The only thing disable/enable re-runs is the `enable()` function with the same cached code.
+
+3. **Always verify `_buildTime` in logs.** After a reload, the first thing to check is whether the build timestamp in the journal matches the expected build. If it shows an old timestamp, the process is running cached code and logout/login is needed.
+
+4. **Gvc stream types are mixed in `get_streams()`.** Returns Sink, Source, SinkInput, SourceOutput, and EventRole all together. Only `GvcMixerSinkInput` represents app audio output. A system with no apps playing audio will correctly show "No active application streams".
+
+5. **PipeWire timing gap.** `MixerControl` reaches `READY` before all sink input streams are registered. A delayed re-check (2s one-shot timer) handles late-arriving streams.
+
+6. **PanelMenu.Button popups need explicit min-width.** Auto-sizing to content gives no floor, so widgets that need horizontal space (sliders) can collapse to unusable sizes.
+
+### Design Decisions
+
+1. **Vertical 2-row layout matching GNOME's StreamSlider pattern.** Header row (icon + label) on top, full-width slider below. This gives the slider the full ~350-400px of PopupMenu width.
+
+2. **Panel popup `min-width: 300px`.** Ensures sliders are usable even when label text is short. Consistent with GNOME's own Quick Settings panel sizing.
+
+3. **One-shot 2s stream re-check** (not periodic polling). A single `GLib.timeout_add_seconds(2, ...)` after MixerControl READY catches late PipeWire stream arrivals without ongoing timer overhead.
+
+4. **Rejection logging in `_streamAdded`.** Every stream that doesn't pass the SinkInput filter is logged with its type and name for post-hoc diagnosis. This makes "no streams showing" investigations trivial.

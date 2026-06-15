@@ -1,3 +1,4 @@
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Gvc from 'gi://Gvc';
@@ -12,12 +13,16 @@ const EMPTY_STATE_TEXT = 'No active application streams';
 const MAX_SAVED_VOLUME_NORM = 1.5;
 
 export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
-    constructor(settings) {
+    constructor(settings, opts = {}) {
         super();
         this.settings = settings;
+        this._volumeMixerOwnerUuid = opts.ownerUuid ?? null;
+        this._volumeMixerSurface = opts.surface ?? 'unknown';
         this._applicationStreams = {};
         this._settingsChangedIds = [];
         this._savedVolumes = {};
+        this._allowFallbackActive = false;
+        this._effectiveFilterMode = 'block';
 
         // The PopupSeparatorMenuItem needs something above and below it or it won't display
         this._hiddenItem = new PopupMenu.PopupBaseMenuItem();
@@ -25,10 +30,14 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this.addMenuItem(this._hiddenItem);
 
         // Device sliders (output + input) above the app streams section
-        this._outputSlider = new DeviceStreamSlider('output');
+        this._outputSlider = new DeviceStreamSlider('output', {
+            getVolumeMax: () => this._getDeviceVolumeMax('output'),
+        });
         this.addMenuItem(this._outputSlider.item);
 
-        this._inputSlider = new DeviceStreamSlider('input');
+        this._inputSlider = new DeviceStreamSlider('input', {
+            getVolumeMax: () => this._getDeviceVolumeMax('input'),
+        });
         this.addMenuItem(this._inputSlider.item);
 
         this.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -43,6 +52,15 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
             console.warn('[volume-mixer] MixerControl not available');
             return;
         }
+
+        this._soundSettings = new Gio.Settings({
+            schema_id: 'org.gnome.desktop.sound',
+        });
+        this._boostEnabled = this._soundSettings.get_boolean('allow-volume-above-100-percent');
+        this._boostChangedId = this._soundSettings.connect(
+            'changed::allow-volume-above-100-percent',
+            () => this._syncBoostState()
+        );
 
         this._streamAddedEventId = this._control.connect('stream-added', this._streamAdded.bind(this));
         this._streamRemovedEventId = this._control.connect('stream-removed', this._streamRemoved.bind(this));
@@ -60,6 +78,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         );
 
         this._loadSavedVolumes();
+        this._syncBoostState();
 
         // MixerControl may still be connecting to PulseAudio/PipeWire;
         // get_streams() returns empty until state reaches READY.
@@ -123,7 +142,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         }
 
         if (!this._shouldShowStream(stream)) {
-            console.log(`[volume-mixer] Filtered stream id=${id} name="${stream.get_name?.()}" by ${this._filterMode} list`);
+            console.log(`[volume-mixer] Filtered stream id=${id} name="${stream.get_name?.()}" by ${this._effectiveFilterMode} list`);
             return;
         }
 
@@ -132,6 +151,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         this._applicationStreams[id] = new ApplicationStreamSlider(stream, {
             showDesc: this._showStreamDesc,
             showIcon: this._showStreamIcon,
+            getVolumeMax: () => this._getApplicationVolumeMax(),
             onStateChanged: updatedStream => this._persistStreamState(updatedStream),
         });
         this.addMenuItem(this._applicationStreams[id].item);
@@ -169,13 +189,60 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
     }
 
     _shouldShowStream(stream) {
-        if (this._filterMode === 'block')
+        if (this._effectiveFilterMode === 'block')
             return this._filteredApps.indexOf(stream.get_name()) === -1;
 
-        if (this._filterMode === 'allow')
+        if (this._effectiveFilterMode === 'allow')
             return this._filteredApps.indexOf(stream.get_name()) !== -1;
 
         return true;
+    }
+
+    _computeEffectiveFilterMode() {
+        const shouldFallbackAllow = this._filterMode === 'allow' && this._filteredApps.length === 0;
+        if (shouldFallbackAllow && !this._allowFallbackActive) {
+            console.log('[volume-mixer] Filter fallback active: allow list is empty, using block mode at runtime');
+            this._allowFallbackActive = true;
+        } else if (!shouldFallbackAllow) {
+            this._allowFallbackActive = false;
+        }
+
+        return shouldFallbackAllow ? 'block' : this._filterMode;
+    }
+
+    _getNormalizedMaxVolume() {
+        const maxVolume = this._control?.get_vol_max_norm?.() ?? 0;
+        return Number.isFinite(maxVolume) && maxVolume > 0 ? maxVolume : 1;
+    }
+
+    _getAmplifiedMaxVolume() {
+        const amplified = this._control?.get_vol_max_amplified?.() ?? 0;
+        if (Number.isFinite(amplified) && amplified > 0)
+            return amplified;
+
+        return this._getNormalizedMaxVolume() * MAX_SAVED_VOLUME_NORM;
+    }
+
+    _getApplicationVolumeMax() {
+        return this._boostEnabled ? this._getAmplifiedMaxVolume() : this._getNormalizedMaxVolume();
+    }
+
+    _getDeviceVolumeMax(deviceType) {
+        if (deviceType === 'output')
+            return this._getApplicationVolumeMax();
+
+        return this._getNormalizedMaxVolume();
+    }
+
+    _syncBoostState() {
+        const nextBoostEnabled = this._soundSettings?.get_boolean('allow-volume-above-100-percent') ?? false;
+        if (this._boostEnabled === nextBoostEnabled)
+            return;
+
+        this._boostEnabled = nextBoostEnabled;
+        this._refreshDeviceSliders();
+        for (const slider of Object.values(this._applicationStreams))
+            slider.refreshVolumeScale();
     }
 
     _updateStreams() {
@@ -186,6 +253,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
 
         this._filteredApps = this.settings.get_strv('filtered-apps');
         this._filterMode = this.settings.get_string('filter-mode');
+        this._effectiveFilterMode = this._computeEffectiveFilterMode();
         this._showStreamDesc = this.settings.get_boolean('show-description');
         this._showStreamIcon = this.settings.get_boolean('show-icon');
 
@@ -251,7 +319,7 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         if (!appKey)
             return;
 
-        const maxVolume = this._control.get_vol_max_norm();
+        const maxVolume = this._getNormalizedMaxVolume();
         const volumeNorm = maxVolume > 0
             ? Math.min(Math.max(stream.volume / maxVolume, 0), MAX_SAVED_VOLUME_NORM)
             : 0;
@@ -282,7 +350,11 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
         if (!savedState)
             return;
 
-        const maxVolume = this._control.get_vol_max_norm();
+        // Saved volumeNorm is defined relative to the normalized (100%) reference,
+        // so restore against the same reference to keep restore(save(v)) == v
+        // regardless of the current boost state (otherwise an amplified scale
+        // would double-apply the boost factor).
+        const maxVolume = this._getNormalizedMaxVolume();
         if (maxVolume <= 0)
             return;
 
@@ -397,6 +469,12 @@ export class VolumeMixerPopupMenu extends PopupMenu.PopupMenuSection {
             this._control.disconnect(this._defaultSourceChangedId);
             this._defaultSourceChangedId = null;
         }
+
+        if (this._soundSettings && this._boostChangedId) {
+            this._soundSettings.disconnect(this._boostChangedId);
+            this._boostChangedId = null;
+        }
+        this._soundSettings = null;
 
         for (const settingsChangedId of this._settingsChangedIds)
             this.settings.disconnect(settingsChangedId);

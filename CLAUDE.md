@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GNOME Shell extension that adds per-application volume sliders to the system audio Quick Settings menu. Maintained fork of the archived `mymindstorm/gnome-volume-mixer`, rewritten for modern GNOME Shell (45-49) ESModule-based extension APIs.
+GNOME Shell extension that adds per-application volume sliders to the system audio Quick Settings menu. Maintained fork of the archived `mymindstorm/gnome-volume-mixer`, rewritten for modern GNOME Shell (45-50) ESModule-based extension APIs.
 
 - **UUID:** `volume-mixer@raimundojimenez.es`
 - **GSettings schema:** `es.raimundojimenez.volume-mixer`
-- **Target:** GNOME Shell 45, 46, 47, 48, 49
+- **Target:** GNOME Shell 45, 46, 47, 48, 49, 50
 
 ## Build & Development Commands
 
@@ -22,7 +22,7 @@ npm run logs            # Tail journal logs only (no build/install)
 
 The install pipeline: build → `gnome-extensions install --force` → `restorecon` (Fedora only) → disable/enable reload cycle.
 
-Most changes take effect after the disable/enable reload. Structural changes (new GObject types, new imports) require logout/login.
+**All code changes require logout/login.** GJS caches ESModules in the GNOME Shell process; `disable()`/`enable()` only re-runs the extension lifecycle with the same cached code. The `npm run install` pipeline still performs a disable/enable to validate the extension loads without errors, but the actual new code won't run until the next session. After reload, verify `_buildTime` in journal logs matches the expected build.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ Most changes take effect after the disable/enable reload. Structural changes (ne
 ```
 extension.js (lifecycle)
 ├── volumeMixerPopupMenu.js  — PopupMenuSection that manages per-app sliders
-│   └── applicationStreamSlider.js — Individual stream: icon + label + slider
+│   └── applicationStreamSlider.js — Individual stream: icon + label row, slider row below
 ├── panelIndicator.js        — Optional top-bar PanelMenu.Button with extension icon
 └── volumeBoostIndicator.js  — Optional QuickToggle for allow-volume-above-100-percent
 ```
@@ -54,6 +54,21 @@ prefs.js → volumeMixerPrefsPage.js → volumeMixerAddFilterDialog.js
 - **Volume persistence:** `VolumeMixerPopupMenu` saves per-app volume/mute state to `saved-app-volumes` GSettings key as `a{sv}` (dict of `(dbs)` tuples: volumeNorm, muted, updatedAt). Restored when streams reappear.
 - **Variant unpacking:** `_unpackVariant()` tries `deep_unpack()`, `deepUnpack()`, and `recursiveUnpack()` to handle GLib.Variant API differences across GNOME versions.
 - **Stream filtering:** Block/allow list in GSettings controls which app streams get sliders.
+- **Slider layout:** Use vertical 2-row layout (header row with icon+label, then full-width slider) inside PopupBaseMenuItem. Never pack a Slider horizontally alongside a label — PopupMenu items have ~350-400px width and the slider needs most of it.
+
+### Gvc Stream Types
+
+`control.get_streams()` returns all stream types mixed together:
+
+| GType | Represents | Example |
+|-------|-----------|---------|
+| `GvcMixerSink` | Output device | Speakers, HDMI |
+| `GvcMixerSource` | Input device | Microphone |
+| `GvcMixerSinkInput` | Per-app output stream | Firefox playing audio |
+| `GvcMixerSourceOutput` | Per-app input stream | App using microphone |
+| `GvcMixerEventRole` | System sound effects | Alert sounds |
+
+Only `GvcMixerSinkInput` streams generate application sliders. A device with no apps playing audio correctly shows "No active application streams".
 
 ### GSettings Schema Keys
 
@@ -89,3 +104,5 @@ Never include `Co-Authored-By` lines in commit messages.
 ## Debugging
 
 Extension logs to GNOME Shell journal with `[volume-mixer@raimundojimenez.es]` prefix. Use `console.log()` / `console.warn()` in source. Runtime notes and past incident analysis in `docs/gnome49-runtime-notes-2026-02-12.md`.
+
+On PipeWire, `MixerControl` reaches `READY` before all sink input streams are registered. The extension schedules a delayed re-check (2s) to catch late-arriving streams. Check rejection logs (`[volume-mixer] Rejected stream`) to verify stream type detection.

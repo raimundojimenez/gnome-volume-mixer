@@ -9,10 +9,13 @@ import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
 const UNMUTE_DEFAULT_VOLUME = 0.25;
 
 export class ApplicationStreamSlider {
-    constructor(stream, opts) {
+    constructor(stream, opts = {}) {
         this.stream = stream;
         this._control = Volume.getMixerControl();
         this._showIcon = opts.showIcon;
+        this._getVolumeMax = typeof opts.getVolumeMax === 'function'
+            ? opts.getVolumeMax
+            : () => this._control?.get_vol_max_norm?.() ?? 1;
         this._onStateChanged = opts.onStateChanged ?? null;
         this._syncing = false;
 
@@ -80,13 +83,30 @@ export class ApplicationStreamSlider {
         return this.stream?.is_muted ?? this.stream?.isMuted ?? false;
     }
 
+    _currentMaxVolume() {
+        const maxVolume = Number(this._getVolumeMax(this.stream));
+        if (Number.isFinite(maxVolume) && maxVolume > 0)
+            return maxVolume;
+
+        const fallback = this._control?.get_vol_max_norm?.() ?? 1;
+        return fallback > 0 ? fallback : 1;
+    }
+
+    _normalizedVolume(volume) {
+        const maxVolume = this._currentMaxVolume();
+        if (maxVolume <= 0)
+            return 0;
+
+        return Math.min(Math.max(volume / maxVolume, 0), 1);
+    }
+
     _toggleMute() {
         if (!this.stream)
             return;
 
         const wasMuted = this._streamIsMuted();
         if (wasMuted && this.stream.volume === 0) {
-            this.stream.volume = UNMUTE_DEFAULT_VOLUME * this._control.get_vol_max_norm();
+            this.stream.volume = UNMUTE_DEFAULT_VOLUME * this._currentMaxVolume();
             this.stream.push_volume();
         }
 
@@ -98,7 +118,7 @@ export class ApplicationStreamSlider {
         if (!this.stream || this._syncing)
             return;
 
-        const volume = this._slider.value * this._control.get_vol_max_norm();
+        const volume = this._slider.value * this._currentMaxVolume();
         if (volume < 1) {
             this.stream.volume = 0;
             this.stream.change_is_muted(true);
@@ -119,7 +139,7 @@ export class ApplicationStreamSlider {
         this._syncing = true;
         this._slider.value = this._streamIsMuted()
             ? 0
-            : this.stream.volume / this._control.get_vol_max_norm();
+            : this._normalizedVolume(this.stream.volume);
         this._syncing = false;
         this._refreshIcon();
     }
@@ -135,7 +155,7 @@ export class ApplicationStreamSlider {
 
         const muted = this._streamIsMuted();
         const volume = this.stream.volume;
-        const maxVolume = this._control.get_vol_max_norm();
+        const maxVolume = this._currentMaxVolume();
         if (muted || volume <= 0) {
             this._icon.icon_name = 'audio-volume-muted-symbolic';
             return;
@@ -157,6 +177,10 @@ export class ApplicationStreamSlider {
     _notifyStateChanged() {
         if (this._onStateChanged)
             this._onStateChanged(this.stream);
+    }
+
+    refreshVolumeScale() {
+        this._syncFromStream();
     }
 
     destroy() {
